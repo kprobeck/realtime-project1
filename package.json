@@ -1,0 +1,29 @@
+{
+  "name": "canvas-syncing-assignment-part1",
+  "version": "1.0.0",
+  "description": "part 1 of canvas syncing assignment hw",
+  "main": ".src/\u001b[B\u001b[D\u001b[D\u001b[A\u001b[D\u001b[D/src/\u001b[C\u001b[D\u001b[D\u001b[D\u001b[Dw\u001b[C\u001b[D\u001b[Dr\u001b[C\u001b[C\u001b[C\u001b[Dserver.js",
+  "scripts": {
+    "start": "node ./src/server.js",
+    "pretest": "eslint ./src --fix",
+    "test": "echo \"Tests Complete\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kprobeck/canvas-syncing-assignment-part1.git"
+  },
+  "author": "Kenneth Probeck",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kprobeck/canvas-syncing-assignment-part1/issues"
+  },
+  "homepage": "https://github.com/kprobeck/canvas-syncing-assignment-part1#readme",
+  "devDependencies": {
+    "eslint": "^4.7.2",
+    "eslint-config-airbnb": "^15.1.0",
+    "eslint-plugin-import": "^2.7.0"
+  },
+  "dependencies": {
+    "socket.io": "^2.0.3"
+  }
+}

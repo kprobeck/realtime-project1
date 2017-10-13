@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  
+    <style>
+        canvas {
+            border: 2px solid black;
+        }
+      
+      #promptHeader {
+        color: red;
+      }
+    </style>
+  
+    <script src="https://npmcdn.com/babel-core@5.8.38/browser.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="text/babel" >
+        "use strict";
+        let socket;
+        let canvas;
+        let ctx;
+        let sendBufferCanvas;
+        let sendBufferCtx;
+        
+        let colorSelect;
+        let mouseX;
+        let mouseY;
+        let prevX;
+        let prevY;
+        let mousedown;
+        
+        let brushSizeSelect;
+        let brushSize;
+
+        let brushSelect;
+        let brushType;
+
+        let clearButton;
+        
+        // init function
+        const init = () => {
+          
+          canvas = document.querySelector("#mainCanvas");
+		  ctx = canvas.getContext('2d');
+          colorSelect = document.querySelector("#colorSelect");
+          brushSizeSelect = document.querySelector("#sizeSelect");
+          brushSelect = document.querySelector("#brushSelect");
+          clearButton = document.querySelector("#clearButton");
+          
+          ctx.fillStyle = 'black';
+          ctx.strokeStyle = 'black';
+          
+          // set initial values for brushSelect and brushSize
+          brushType = 'square';
+          brushSize = 3;
+          
+          // add a listener on the canvas to grab the mouse location every time it moves
+          canvas.addEventListener('mousemove', (e) => {
+            getMousePos(canvas, e);
+            
+            if(mousedown) {
+              switch(brushType) {
+              case 'square':
+                ctx.fillRect(mouseX, mouseY, brushSize, brushSize);
+                break;
+              case 'circle':
+                ctx.beginPath();
+                ctx.arc(mouseX, mouseY, brushSize, 0, 2 * Math.PI);
+                ctx.closePath();
+                ctx.fill();
+                break;
+              case 'line':
+                ctx.lineWidth = brushSize;
+                ctx.beginPath();
+                ctx.moveTo(prevX, prevY);
+                ctx.lineTo(mouseX, mouseY);
+                ctx.closePath();
+                ctx.stroke();
+              default:
+                ctx.fillRect(mouseX, mouseY, brushSize, brushSize);;
+            }
+              drawToBufferCtx();
+            }
+          }, false);
+          
+          // add listeners on the window to see if the mouse is being pressed down
+          canvas.addEventListener('mousedown', () => {
+            mousedown = true;
+          });
+          
+          canvas.addEventListener('mouseup', () => {
+            mousedown = false;
+          });
+          
+          // events for interacting with page
+          colorSelect.onchange = (e) => {
+            ctx.fillStyle = e.target.value;
+            sendBufferCtx.fillStyle = e.target.value;
+            
+            ctx.strokeStyle = e.target.value;
+            sendBufferCtx.strokeStyle = e.target.value;
+          };
+          
+          sizeSelect.onchange = (e) => {
+            brushSize = e.target.value;
+          };
+          
+          brushSelect.onchange = (e) => {
+            brushType = e.target.value;
+          };
+          
+          clearButton.onclick = (e) => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            sendBufferCtx.clearRect(0, 0, canvas.width, canvas.height);
+            socket.emit('clearCanvas');
+          };
+          
+          // hook up sockets, then get first prompt
+          socket = io.connect();
+          
+          setupSocket();
+          
+          socket.emit('getPrompt');
+          
+          setInterval( () => {
+            socket.emit('getPrompt');
+          }, 20000);
+        };
+        
+        window.onload = init;
+
+        // function to give what is being drawn to the current canvas to also be sent to the buffer canvas
+        const drawToBufferCtx = () => {
+          
+            switch(brushType) {
+              case 'square':
+                sendBufferCtx.fillRect(mouseX, mouseY, brushSize, brushSize);
+                break;
+              case 'circle':
+                sendBufferCtx.beginPath();
+                sendBufferCtx.arc(mouseX, mouseY, brushSize, 0, 2 * Math.PI);
+                sendBufferCtx.closePath();
+                sendBufferCtx.fill();
+                break;
+              case 'line':
+                sendBufferCtx.lineWidth = brushSize;
+                sendBufferCtx.beginPath();
+                sendBufferCtx.moveTo(prevX, prevY);
+                sendBufferCtx.lineTo(mouseX, mouseY);
+                sendBufferCtx.closePath();
+                sendBufferCtx.stroke();
+              default:
+                sendBufferCtx.fillRect(mouseX, mouseY, brushSize, brushSize);
+            }
+          
+            const imgDat = sendBufferCanvas.toDataURL(); // pixel data from canvas
+            
+            const data = {
+              x: 0,
+              y: 0,
+              height: canvas.height,
+              width: canvas.width,
+              imgData: imgDat,
+            };
+          
+            socket.emit('draw', data);
+          };
+
+        // function to get mouse location, but first set previous locations just in case we need to draw a line
+        const getMousePos = (canvas, e) => {
+          prevX = mouseX;
+          prevY = mouseY;
+          var rect = canvas.getBoundingClientRect();
+          mouseX = e.clientX - rect.left;
+          mouseY = e.clientY - rect.top;
+        };
+
+        // socket setup function
+        const setupSocket = () => {
+          socket.emit('join');
+          
+          sendBufferCanvas = document.createElement("canvas");
+          sendBufferCanvas.height = canvas.height;
+          sendBufferCanvas.width = canvas.width;
+          sendBufferCtx = sendBufferCanvas.getContext("2d");
+          
+          
+          socket.on('drawToCanvas', (data) => {
+            let image = new Image();
+            
+            image.onload = () => {
+              ctx.save();
+              ctx.globalCompositeOperation = "source-over"; // default
+              ctx.drawImage(image, data.x, data.y, data.width, data.height);
+              ctx.restore();
+            };
+            
+            image.src = data.imgData;
+          });
+          
+          socket.on('newPrompt', (data) => {
+            document.querySelector("#promptHeader").innerHTML = `Try drawing: ${data.prompt}`;
+          });
+          
+          socket.on('eraseCanvas', () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            sendBufferCtx.clearRect(0, 0, canvas.width, canvas.height);
+          });
+          
+        };
+    
+    </script>
+</head>
+<body>
+  <h1>Draw Together!</h1>
+  <canvas id="mainCanvas" width="700" height="500">
+	Cannot create canvas element...
+	</canvas>
+  <h2 id="promptHeader">Try drawing:</h2>
+  <h3>Color:</h3>
+  <select id="colorSelect">
+    <option value="black">Black</option>
+    <option value="red">Red</option>
+    <option value="orange">Orange</option>
+    <option value="yellow">Yellow</option>
+    <option value="green">Green</option>
+    <option value="blue">Blue</option>
+    <option value="#4B0082">Indigo</option>
+    <option value="purple">Violet</option>
+  </select>
+  
+  <h3>Brush Size:</h3>
+  <select id="sizeSelect">
+    <option value="3">3</option>
+    <option value="10">10</option>
+    <option value="10">25</option>
+  </select>
+  
+  <h3>Brush Style:</h3>
+  <select id="brushSelect">
+    <option value='square'>Square</option>
+    <option value='circle'>Circle</option>
+    <option value='line'>Line</option>
+  </select>
+  
+  <h3>Clear Drawing (WARNING, CLEARS FOR ALL USERS):</h3>
+  <button id="clearButton">Clear</button>
+</body>
+</html>
