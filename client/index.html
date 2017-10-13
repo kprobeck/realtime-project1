@@ -10,6 +10,10 @@
       #promptHeader {
         color: red;
       }
+      
+      #currentUserListItem {
+        color: red;
+      }
     </style>
   
     <script src="https://npmcdn.com/babel-core@5.8.38/browser.min.js"></script>
@@ -36,6 +40,20 @@
         let brushType;
 
         let clearButton;
+
+        let joined;
+        let joinButton;
+
+        let users = {};
+        let userList;
+
+        let gameStarted;
+        let isTurn;
+
+        let userTimeStamp;
+        let currentUser;
+
+        let guessButton;
         
         // init function
         const init = () => {
@@ -46,9 +64,17 @@
           brushSizeSelect = document.querySelector("#sizeSelect");
           brushSelect = document.querySelector("#brushSelect");
           clearButton = document.querySelector("#clearButton");
+          joinButton = document.querySelector("#joinButton");
+          guessButton = document.querySelector("#guessButton");
+          userList = document.querySelector("#userList");
           
           ctx.fillStyle = 'black';
           ctx.strokeStyle = 'black';
+          
+          joined = false;
+          gameStarted = false;
+          userTimeStamp = 1;
+          currentUser = 0;
           
           // set initial values for brushSelect and brushSize
           brushType = 'square';
@@ -58,7 +84,7 @@
           canvas.addEventListener('mousemove', (e) => {
             getMousePos(canvas, e);
             
-            if(mousedown) {
+            if(mousedown && (currentUser == userTimeStamp)) {
               switch(brushType) {
               case 'square':
                 ctx.fillRect(mouseX, mouseY, brushSize, brushSize);
@@ -84,11 +110,11 @@
           }, false);
           
           // add listeners on the window to see if the mouse is being pressed down
-          canvas.addEventListener('mousedown', () => {
+          window.addEventListener('mousedown', () => {
             mousedown = true;
           });
           
-          canvas.addEventListener('mouseup', () => {
+          window.addEventListener('mouseup', () => {
             mousedown = false;
           });
           
@@ -110,9 +136,43 @@
           };
           
           clearButton.onclick = (e) => {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            sendBufferCtx.clearRect(0, 0, canvas.width, canvas.height);
-            socket.emit('clearCanvas');
+            if(currentUser == userTimeStamp) {
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              sendBufferCtx.clearRect(0, 0, canvas.width, canvas.height);
+              socket.emit('clearCanvas');
+            }
+          };
+          
+          // hook up join button to have the user join the server
+          joinButton.onclick = (e) => {
+            if(!joined) {
+              let name = document.querySelector("#usernameInput").value;
+              // let room = document.querySelector("#roomInput").value;
+              let data = {
+                name: name,
+                timeStamp: new Date().getTime(),
+                // roomCode: room,
+              };
+              socket.emit('join', data);
+              joined = true;
+              document.querySelector("#usernameInput").disabled = 'disabled';
+              userTimeStamp = data.timeStamp;
+            }
+          };
+          
+          // hook up guess button to submit and potentially receive points
+          guessButton.onclick = (e) => {
+            // only allowed to guess if it is not your turn
+            if(currentUser != userTimeStamp) {
+              let guess = document.querySelector("#guessInput").value;
+              let data = {
+                guess: guess,
+                userTimeStamp: userTimeStamp,
+              };
+              socket.emit('guessSent', data);
+              
+              document.querySelector("#guessInput").value = "";
+            }
           };
           
           // hook up sockets, then get first prompt
@@ -120,11 +180,9 @@
           
           setupSocket();
           
-          socket.emit('getPrompt');
-          
-          setInterval( () => {
+          /*setInterval( () => {
             socket.emit('getPrompt');
-          }, 20000);
+          }, 20000);*/
         };
         
         window.onload = init;
@@ -177,8 +235,6 @@
 
         // socket setup function
         const setupSocket = () => {
-          socket.emit('join');
-          
           sendBufferCanvas = document.createElement("canvas");
           sendBufferCanvas.height = canvas.height;
           sendBufferCanvas.width = canvas.width;
@@ -199,12 +255,55 @@
           });
           
           socket.on('newPrompt', (data) => {
-            document.querySelector("#promptHeader").innerHTML = `Try drawing: ${data.prompt}`;
+            document.querySelector("#promptHeader").innerHTML = `Your prompt: ${data.prompt}`;
+          });
+          
+          socket.on('guessThePrompt', () => {
+            document.querySelector("#promptHeader").innerHTML = `Try guessing what ${users[currentUser].name} is drawing!`;
           });
           
           socket.on('eraseCanvas', () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             sendBufferCtx.clearRect(0, 0, canvas.width, canvas.height);
+          });
+          
+          socket.on('startGame', (data) => {
+            gameStarted = true;
+            currentUser = data;
+            if(currentUser == userTimeStamp) {
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              sendBufferCtx.clearRect(0, 0, canvas.width, canvas.height);
+              socket.emit('clearCanvas');
+              socket.emit('getPrompt');
+              document.querySelector("#guessInput").value = 'YOUR TURN TO DRAW!';
+              document.querySelector("#guessInput").disabled = 'disabled';
+            }
+          });
+          
+          socket.on('correctGuess', (data) => {
+            document.querySelector("#guessInput").disabled = 'disabled';
+          });
+          
+          // update user info
+          socket.on('userData', (data) => {
+            users = data;
+            
+            let innerHTML = "";
+            
+            // update user list
+            let keysOfUsers = Object.keys(users);
+            for(let i = 0; i < keysOfUsers.length; i++) {
+              const username = users[keysOfUsers[i]].name;
+              const score = users[keysOfUsers[i]].points;
+              if(currentUser == keysOfUsers[i]) {
+                innerHTML += `<li id="currentUserListItem">${username}: ${score} points</li>`;
+              } else {
+                innerHTML += `<li>${username}: ${score} points</li>`;
+              }
+            }
+            
+            userList.innerHTML = innerHTML;
+            
           });
           
         };
@@ -213,10 +312,18 @@
 </head>
 <body>
   <h1>Draw Together!</h1>
+  Enter a Name: <input type="text" id="usernameInput">
+  <!-- Enter a Room Code:<input type="text" id="roomInput"> -->
+  <button id="joinButton">Join</button><br>
   <canvas id="mainCanvas" width="700" height="500">
 	Cannot create canvas element...
 	</canvas>
-  <h2 id="promptHeader">Try drawing:</h2>
+  <h2>Current Users:</h2>
+  <ul id="userList">
+  </ul>
+  <h2 id="promptHeader">Waiting for 3 Players to Join!</h2>
+  Guess the Prompt: <input type="text" id="guessInput">
+  <button id="guessButton">Submit</button><br>
   <h3>Color:</h3>
   <select id="colorSelect">
     <option value="black">Black</option>
@@ -243,7 +350,6 @@
     <option value='line'>Line</option>
   </select>
   
-  <h3>Clear Drawing (WARNING, CLEARS FOR ALL USERS):</h3>
   <button id="clearButton">Clear</button>
 </body>
 </html>
