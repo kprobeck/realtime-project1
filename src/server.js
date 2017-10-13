@@ -91,7 +91,7 @@ const onMsg = (sock) => {
   socket.on('guessSent', (data) => {
     
     // if it is, award points, then update user data
-    if(data.guess == currentPrompt) {
+    if(data.guess === currentPrompt) {
       users[data.userTimeStamp].points += 50;
       users[currentUser].points += 100;
       io.sockets.in('room1').emit('userData', users);
