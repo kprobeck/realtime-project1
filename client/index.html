@@ -3,13 +3,70 @@
 <head>
   
     <style>
-        canvas {
-            border: 2px solid black;
-        }
+      body {
+        background-color: beige;
+        color: black;
+        font-family:sans-serif;
+      }
+      
+      textarea {
+        resize: none;
+      }
+      
+      ul {
+        list-style-type: none;
+        padding-right: 20%;
+        max-width: 80%;
+      }
+      
+      canvas {
+          border: 2px solid black;
+          background-color: white;
+      }
+      
+      h1 {
+        text-align: center;
+        font-size: 38px;
+      }
+      
+      #userInfo {
+        text-align: center;
+      }
+      
+      #userListandChat {
+        text-align: center;
+        max-width: 40%;
+        padding-top: 4%;
+        float: left;
+        padding-left: 4%;
+      }
+      
+      #canvasDiv {
+        text-align: center;
+        float: left;
+        padding-left: 4%;
+      }
+      
+      #drawingTools {
+        text-align: center;
+        max-width: 10%;
+        float: left;
+        padding-top: 7%;
+        padding-left: 5%;
+        margin-right: 10%;
+      }
+      
+      #readyDiv {
+        visibility: hidden;
+      }
       
       #promptHeader {
         color: red;
+        min-width: 100%;
+        float: left;
+        text-align: center;
       }
+      
       
       #currentUserListItem {
         color: red;
@@ -20,6 +77,8 @@
     <script src="/socket.io/socket.io.js"></script>
     <script type="text/babel" >
         "use strict";
+
+        // variables
         let socket;
         let canvas;
         let ctx;
@@ -54,6 +113,8 @@
         let currentUser;
 
         let guessButton;
+
+        let chatBox;
         
         // init function
         const init = () => {
@@ -67,6 +128,7 @@
           joinButton = document.querySelector("#joinButton");
           guessButton = document.querySelector("#guessButton");
           userList = document.querySelector("#userList");
+          chatBox = document.querySelector("#chat");
           
           ctx.fillStyle = 'black';
           ctx.strokeStyle = 'black';
@@ -77,8 +139,8 @@
           currentUser = 0;
           
           // set initial values for brushSelect and brushSize
-          brushType = 'square';
-          brushSize = 3;
+          brushType = 'line';
+          brushSize = 1;
           
           // add a listener on the canvas to grab the mouse location every time it moves
           canvas.addEventListener('mousemove', (e) => {
@@ -102,6 +164,7 @@
                 ctx.lineTo(mouseX, mouseY);
                 ctx.closePath();
                 ctx.stroke();
+                break;
               default:
                 ctx.fillRect(mouseX, mouseY, brushSize, brushSize);;
             }
@@ -143,6 +206,15 @@
             }
           };
           
+          // 
+          document.querySelector("#readyUp").onchange = (e) => {
+            let data = {
+              userTimeStamp: userTimeStamp,
+              ready: e.target.checked,
+            };
+            socket.emit('readyUp', data);
+          };
+          
           // hook up join button to have the user join the server
           joinButton.onclick = (e) => {
             if(!joined) {
@@ -156,7 +228,10 @@
               socket.emit('join', data);
               joined = true;
               document.querySelector("#usernameInput").disabled = 'disabled';
+              document.querySelector("#readyUp").disabled = '';
               userTimeStamp = data.timeStamp;
+              
+              document.querySelector("#readyUp").style.visibility = "visible";
             }
           };
           
@@ -179,13 +254,24 @@
           socket = io.connect();
           
           setupSocket();
-          
-          /*setInterval( () => {
-            socket.emit('getPrompt');
-          }, 20000);*/
         };
         
         window.onload = init;
+
+        // function to start the next round
+        const startRound = (data) => {
+          document.querySelector("#guessInput").disabled = '';
+          document.querySelector("#guessInput").value = '';
+          currentUser = data;
+          if(currentUser == userTimeStamp) {
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              sendBufferCtx.clearRect(0, 0, canvas.width, canvas.height);
+              socket.emit('clearCanvas');
+              socket.emit('getPrompt');
+              document.querySelector("#guessInput").value = 'YOUR TURN TO DRAW!';
+              document.querySelector("#guessInput").disabled = 'disabled';
+            }
+        };
 
         // function to give what is being drawn to the current canvas to also be sent to the buffer canvas
         const drawToBufferCtx = () => {
@@ -207,6 +293,7 @@
                 sendBufferCtx.lineTo(mouseX, mouseY);
                 sendBufferCtx.closePath();
                 sendBufferCtx.stroke();
+                break;
               default:
                 sendBufferCtx.fillRect(mouseX, mouseY, brushSize, brushSize);
             }
@@ -267,21 +354,40 @@
             sendBufferCtx.clearRect(0, 0, canvas.width, canvas.height);
           });
           
+          // official start of game
           socket.on('startGame', (data) => {
             gameStarted = true;
-            currentUser = data;
-            if(currentUser == userTimeStamp) {
-              ctx.clearRect(0, 0, canvas.width, canvas.height);
-              sendBufferCtx.clearRect(0, 0, canvas.width, canvas.height);
-              socket.emit('clearCanvas');
-              socket.emit('getPrompt');
-              document.querySelector("#guessInput").value = 'YOUR TURN TO DRAW!';
-              document.querySelector("#guessInput").disabled = 'disabled';
-            }
+            startRound(data);
           });
           
+          // start new round
+          socket.on('startRound', (data) => {
+            startRound(data);
+          });
+          
+          // all users are ready, disable ready checkbox
+          socket.on('allReady', () => {
+            document.querySelector("#readyUp").disabled = 'disabled';
+          });
+          
+          // disable input if they got the correct answer
           socket.on('correctGuess', (data) => {
             document.querySelector("#guessInput").disabled = 'disabled';
+          });
+          
+          // inform other users when someone makes a correct guess
+          socket.on('correctGuessAll', (data) => {
+            chat.innerHTML += `${users[data].name} guessed the prompt correctly!\n`;
+          });
+          
+          // inform other users when someone makes an incorrect guess
+          socket.on('incorrectGuessAll', (data) => {
+            chat.innerHTML += `${users[data.userTimeStamp].name}: ${data.guess}\n`;
+          });
+          
+          // update countdown
+          socket.on('getCountDown', (data) => {
+            document.querySelector("#countdownHeader").innerHTML = `${data} seconds left!`;
           });
           
           // update user info
@@ -312,18 +418,29 @@
 </head>
 <body>
   <h1>Draw Together!</h1>
-  Enter a Name: <input type="text" id="usernameInput">
-  <!-- Enter a Room Code:<input type="text" id="roomInput"> -->
-  <button id="joinButton">Join</button><br>
-  <canvas id="mainCanvas" width="700" height="500">
-	Cannot create canvas element...
-	</canvas>
-  <h2>Current Users:</h2>
+  <div id="userInfo">Enter a Name: <input type="text" id="usernameInput">
+  <button id="joinButton">Join</button>
+  <br>
+  <br>  
+  Ready?<input type="checkbox" id="readyUp" disabled="disabled"></div><br>
+  
+  <div id="userListandChat">
+  <h2>Current Players:</h2>
   <ul id="userList">
   </ul>
-  <h2 id="promptHeader">Waiting for 3 Players to Join!</h2>
-  Guess the Prompt: <input type="text" id="guessInput">
-  <button id="guessButton">Submit</button><br>
+  <h2 id="countdownHeader"></h2>
+  <input type="text" id="guessInput">
+  <button id="guessButton">Submit</button><br><br>
+  <textarea id="chat" rows="20" cols="40" readonly> </textarea>
+  </div>
+  
+  <div id="canvasDiv">
+  <canvas id="mainCanvas" width="1000" height="700">
+	Cannot create canvas element...
+	</canvas>
+  </div>
+  
+  <div id="drawingTools">
   <h3>Color:</h3>
   <select id="colorSelect">
     <option value="black">Black</option>
@@ -334,22 +451,30 @@
     <option value="blue">Blue</option>
     <option value="#4B0082">Indigo</option>
     <option value="purple">Violet</option>
+    <option value="white">White</option>
   </select>
   
   <h3>Brush Size:</h3>
   <select id="sizeSelect">
-    <option value="3">3</option>
+    <option value="1">1</option>
+    <option value="5">5</option>
     <option value="10">10</option>
-    <option value="10">25</option>
+    <option value="25">25</option>
   </select>
   
   <h3>Brush Style:</h3>
   <select id="brushSelect">
+    <option value='line'>Line</option>
     <option value='square'>Square</option>
     <option value='circle'>Circle</option>
-    <option value='line'>Line</option>
   </select>
-  
+  <br>
+  <br>
+  <br>
+  <br>
   <button id="clearButton">Clear</button>
+  </div>
+  
+  <h2 id="promptHeader">Waiting for 3 Players to Join!</h2>
 </body>
 </html>
