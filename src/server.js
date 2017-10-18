@@ -7,15 +7,18 @@ const port = process.env.PORT || process.env.NODE_PORT || 3000;
 const index = fs.readFileSync(`${__dirname}/../client/index.html`);
 
 const prompts = ['Apple', 'Monkey', 'Car', 'Nuclear Physics', 'Plane', 'Horse', 'Goose', 'Computer',
-  'Bottle of Root Beer', 'Waves', 'Pirates', 'Superhero', 'Lightbulb', 'one-eyed Monster',
-  'Corkscrew', 'Controller', 'Sunglasses', 'Rats', 'Cheese', 'Spooky Scary Skeletons', 'Printer', 'Pencil',
-  'Server', 'Waiter', 'Movies Tickets', 'Popcorn', 'Hot Dogs', 'Dance Performance', 'The entire Map of Skyrim', 'Old-Timey Cartoons',
-  'Memes', 'Chicken'];
+  'Bottle', 'Waves', 'Pirate', 'Superhero', 'Lightbulb', 'Monster',
+  'Corkscrew', 'Controller', 'Sunglasses', 'Rats', 'Cheese', 'Skeleton', 'Printer', 'Pencil',
+  'Space', 'Waiter', 'Movies Tickets', 'Popcorn', 'Hot Dog', 'Dragon', 'The entire Map of Skyrim',
+  'Memes', 'Chicken', 'Baby', 'Lion', 'Duck', 'Pizza', 'Ninja', 'Zebra', 'Rabbit', 'Volcano', 'Garbage',
+  'Giraffe', 'Unicorn', 'Battery', 'Ice Cream', 'Lollipop', 'Balloon', 'Christmas', 'Halloween', 'Turtle', 
+  'Flower', 'Acorn', 'Moose', 'Snake', 'Donut', 'Earth', 'Rose', 'Lobster', 'Jellyfish', 'Bucket', 'Cookie',
+  'Water', 'Beach', 'Shark', 'Pumpkin', 'Moon', 'Sun', 'Bird', 'Book', ''];
 
 const users = {};
 let currentUser;
 let currentPrompt;
-let countDown = 30;
+let countDown = 60;
 let allReady = false;
 let gameStarted = false;
 
@@ -51,6 +54,13 @@ const onJoined = (sock) => {
     console.log(`${socket.name} has successfully logged in`);
     
     io.sockets.in('room1').emit('userData', users);
+    
+    if(gameStarted){
+      socket.emit('startRound', currentUser);
+      socket.emit('userData', users); // to update/highlight the current user
+      socket.emit('guessThePrompt');
+      socket.emit('gameAlreadyInProgress');
+    }
   });
 };
 
@@ -107,7 +117,7 @@ const onMsg = (sock) => {
         io.sockets.in('room1').emit('startRound', currentUser);
         io.sockets.in('room1').emit('userData', users); // to update/highlight the current user
         io.sockets.in('room1').emit('eraseCanvas');
-        countDown = 30;
+        countDown = 60;
         }
       }, 1000);
     }

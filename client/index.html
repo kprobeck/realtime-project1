@@ -360,6 +360,12 @@
             startRound(data);
           });
           
+          // if the game is already started, make the ready box checked and disabled
+          socket.on('gameAlreadyInProgress', (data) => {
+            document.querySelector("#readyUp").disabled = 'disabled';
+            document.querySelector("#readyUp").checked = true;
+          });
+          
           // start new round
           socket.on('startRound', (data) => {
             startRound(data);
@@ -475,6 +481,6 @@
   <button id="clearButton">Clear</button>
   </div>
   
-  <h2 id="promptHeader">Waiting for 3 Players to Join!</h2>
+  <h2 id="promptHeader">Waiting for at least 3 Players to Join!</h2>
 </body>
 </html>
