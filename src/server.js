@@ -83,7 +83,8 @@ const onMsg = (sock) => {
       io.sockets.in('room1').emit('userData', users); // to update/highlight the current user
       io.sockets.in('room1').emit('allReady');
       
-      // every second, the coundown timer will decrease by 1, when it hits 0 it will go to the next user to draw
+      // every second, the coundown timer will decrease by 1, when it hits 0 it will go 
+      // to the next user to draw
       gameStarted = true;
       setInterval( () => {
         countDown--;
@@ -97,7 +98,7 @@ const onMsg = (sock) => {
           if(currentUser < keysOfUsers[i]){
             currentUser = keysOfUsers[i];
             break;
-          } else if (currentUser == keysOfUsers[keysOfUsers.length - 1]) {
+          } else if (currentUser === keysOfUsers[keysOfUsers.length - 1]) {
             currentUser = keysOfUsers[0];
             break;
           }
